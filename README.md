@@ -2,6 +2,8 @@
 
 This repository contains the artifacts for the AWS blog post [Mirror production traffic to test environment with VPC Traffic Mirroring](https://www.example.com/).
 
+![The diagram shows how requests for the production environment are replied to the test environment](images/mirroring.png)
+
 ## Additional Considerations
 
 #### Parameters
