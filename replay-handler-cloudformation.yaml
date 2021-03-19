@@ -1,0 +1,432 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Replay handler of HTTP requests.
+
+Parameters:
+  HandlerVpcId:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: VpcId of your existing Virtual Private Cloud (VPC).
+    ConstraintDescription: must be the VPC Id of an existing Virtual Private Cloud.
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
+    ConstraintDescription: >-
+      must be a list of at least one existing subnets. They should be residing in
+      the selected Virtual Private Cloud. it is recommended to provide at least two
+      subnets in separate availability zones, for high availability purposes.
+  InstanceType:
+    Description: EC2 instance type for the replay handler.
+    Type: String
+    Default: t4g.small
+    AllowedValues: [
+      t4g.nano, t4g.micro, t4g.small, t4g.medium, t4g.large, t4g.xlarge, t4g.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+
+      m6g.medium, m6g.large, m6g.xlarge, m6g.2xlarge, m6g.4xlarge, m6g.8xlarge, m6g.12xlarge, m6g.16xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge, m5.8xlarge, m5.12xlarge, m5.16xlarge, m5.24xlarge,
+      m5n.large, m5n.xlarge, m5n.2xlarge, m5n.4xlarge, m5n.8xlarge, m5n.12xlarge, m5n.16xlarge, m5n.24xlarge,
+
+      c6g.medium, c6g.large, c6g.xlarge, c6g.2xlarge, c6g.4xlarge, c6g.8xlarge, c6g.12xlarge, c6g.16xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge, c5.12xlarge, c5.18xlarge, c5.24xlarge,
+      c5n.large, c5n.xlarge, c5n.2xlarge, c5n.4xlarge, c5n.9xlarge, c5n.18xlarge,
+
+      r6g.medium, r6g.large, r6g.xlarge, r6g.2xlarge, r6g.4xlarge, r6g.8xlarge, r6g.12xlarge, r6g.16xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge, r5.8xlarge, r5.12xlarge, r5.16xlarge, r5.24xlarge,
+      r5n.large, r5n.xlarge, r5n.2xlarge, r5n.4xlarge, r5n.8xlarge, r5n.12xlarge, r5n.16xlarge, r5n.24xlarge,
+    ]
+    ConstraintDescription: must be a valid EC2 instance type.
+  InstanceNumber:
+    Type: Number
+    Default: 2
+    Description: Number of EC2 instances in the replay handler.
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances.
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  FilterByDestinationCidrBlock:
+    Description: Filter the mirrored requests by destination IP.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: '0.0.0.0/0'
+  FilterByDestinationPort:
+    Description: Filter the mirrored requests by destination port.
+    Type: Number
+    MinValue: 0
+    MaxValue: 65535
+    ConstraintDescription: must be a valid port.
+    Default: 80
+  FilterBySourceCidrBlock:
+    Description: Filter the mirrored requests by source IP.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: '0.0.0.0/0'
+  TrafficMirroringVNI:
+    Description: The VXLAN ID for traffic mirroring session.
+    Type: Number
+    MinValue: 1
+    MaxValue: 16777215
+    ConstraintDescription: must be an integer between 1 and 16777215.
+  LatestAmiIdX86:
+    Description: DO NOT change this parameter. This refers to the latest Amazon Linux 2 AMI.
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    ConstraintDescription: 'only use /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  LatestAmiIdArm:
+    Description: DO NOT change this parameter. This refers to the latest Amazon Linux 2 AMI.
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2'
+    ConstraintDescription: 'only use /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2'
+  RequestsForwardDestination:
+    Description: >- 
+      The destination endpoint of the forwarded HTTP requests. The endpoint can be an IP address or a DNS name.
+      Enter the endpoint AND its protocol, like: http://172.0.0.1 or https://www.example.com.
+    Type: String
+    ConstraintDescription: 'Enter the endpoint AND its protocol, like: http://172.0.0.1 or https://www.example.com.'
+  ForwardPercentage:
+    Description: The percentage of traffic that gets replicated. Enter a number between 0 and 100.
+    Type: Number
+    Default: 100
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: 'Enter a number between 0 and 100.'
+  PercentageBy:
+    Description: >- 
+      How traffic percentage is determined. If empty, then forward only a certain percentage of requests.
+      If header/remoteaddr, then forward only requests from a certain percentage of headers/remoteaddresses.
+    Type: String
+    AllowedValues:
+      - ''
+      - 'header'
+      - 'remoteaddr'
+  PercentageByHeader:
+    Description: If the parameter PercentageBy is set to 'header', then enter the name of the header. Otherwise, leave it empty.
+    Type: String
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Infrastructure"
+        Parameters: 
+          - HandlerVpcId
+          - Subnets
+          - InstanceType
+          - InstanceNumber
+          - KeyName
+          - SSHLocation
+          - TrafficMirroringVNI
+      - 
+        Label: 
+          default: "Filters of mirroring"
+        Parameters: 
+          - RequestsForwardDestination
+          - ForwardPercentage
+          - PercentageBy
+          - PercentageByHeader
+          - FilterBySourceCidrBlock
+          - FilterByDestinationCidrBlock
+          - FilterByDestinationPort
+      - 
+        Label: 
+          default: "Do NOT change these"
+        Parameters: 
+          - LatestAmiIdX86
+          - LatestAmiIdArm
+
+Mappings: 
+  AmiMap: 
+    {
+      t4g.nano: {arch: arm}, t4g.micro: {arch: arm}, t4g.small: {arch: arm}, t4g.medium: {arch: arm}, t4g.large: {arch: arm}, t4g.xlarge: {arch: arm}, t4g.2xlarge: {arch: arm}, m6g.medium: {arch: arm}, m6g.large: {arch: arm}, m6g.xlarge: {arch: arm}, m6g.2xlarge: {arch: arm}, m6g.4xlarge: {arch: arm}, m6g.8xlarge: {arch: arm}, m6g.12xlarge: {arch: arm}, m6g.16xlarge: {arch: arm}, c6g.medium: {arch: arm}, c6g.large: {arch: arm}, c6g.xlarge: {arch: arm}, c6g.2xlarge: {arch: arm}, c6g.4xlarge: {arch: arm}, c6g.8xlarge: {arch: arm}, c6g.12xlarge: {arch: arm}, c6g.16xlarge: {arch: arm}, r6g.medium: {arch: arm}, r6g.large: {arch: arm}, r6g.xlarge: {arch: arm}, r6g.2xlarge: {arch: arm}, r6g.4xlarge: {arch: arm}, r6g.8xlarge: {arch: arm}, r6g.12xlarge: {arch: arm}, r6g.16xlarge: {arch: arm}
+      ,t3.nano: {arch: x86}, t3.micro: {arch: x86}, t3.small: {arch: x86}, t3.medium: {arch: x86}, t3.large: {arch: x86}, t3.xlarge: {arch: x86}, t3.2xlarge: {arch: x86}, m5.large: {arch: x86}, m5.xlarge: {arch: x86}, m5.2xlarge: {arch: x86}, m5.4xlarge: {arch: x86}, m5.8xlarge: {arch: x86}, m5.12xlarge: {arch: x86}, m5.16xlarge: {arch: x86}, m5.24xlarge: {arch: x86}, m5n.large: {arch: x86}, m5n.xlarge: {arch: x86}, m5n.2xlarge: {arch: x86}, m5n.4xlarge: {arch: x86}, m5n.8xlarge: {arch: x86}, m5n.12xlarge: {arch: x86}, m5n.16xlarge: {arch: x86}, m5n.24xlarge: {arch: x86}, c5.large: {arch: x86}, c5.xlarge: {arch: x86}, c5.2xlarge: {arch: x86}, c5.4xlarge: {arch: x86}, c5.9xlarge: {arch: x86}, c5.12xlarge: {arch: x86}, c5.18xlarge: {arch: x86}, c5.24xlarge: {arch: x86}, c5n.large: {arch: x86}, c5n.xlarge: {arch: x86}, c5n.2xlarge: {arch: x86}, c5n.4xlarge: {arch: x86}, c5n.9xlarge: {arch: x86}, c5n.18xlarge: {arch: x86}, r5.large: {arch: x86}, r5.xlarge: {arch: x86}, r5.2xlarge: {arch: x86}, r5.4xlarge: {arch: x86}, r5.8xlarge: {arch: x86}, r5.12xlarge: {arch: x86}, r5.16xlarge: {arch: x86}, r5.24xlarge: {arch: x86}, r5n.large: {arch: x86}, r5n.xlarge: {arch: x86}, r5n.2xlarge: {arch: x86}, r5n.4xlarge: {arch: x86}, r5n.8xlarge: {arch: x86}, r5n.12xlarge: {arch: x86}, r5n.16xlarge: {arch: x86}, r5n.24xlarge: {arch: x86}
+    }
+
+Conditions:
+  UseArm: !Equals [!FindInMap [AmiMap, !Ref "InstanceType", "arch"], arm]
+
+Resources:
+  InstancesGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      VPCZoneIdentifier: !Ref Subnets
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: !Ref InstanceNumber
+      MaxSize: !Ref InstanceNumber
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 180
+      TargetGroupARNs:
+        - !Ref NLBTargetGroup
+      TerminationPolicies:
+        - OldestInstance
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 0
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      KeyName: !Ref KeyName
+      ImageId: !If [UseArm, !Ref LatestAmiIdArm, !Ref LatestAmiIdX86]
+      SecurityGroups:
+        - !Ref InstanceSecurityGroup
+      InstanceType: !Ref InstanceType
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+              #
+              #
+              ### update and install ###
+              #
+              export HOME=~
+              yum update -y
+              yum install git -y
+              yum install go -y
+              # dependency of github.com/google/gopacket
+              yum install install libpcap-devel -y
+              #
+              #
+              ### dependency of main.go ###
+              go env GOPATH
+              echo 'export GOPATH=$HOME/go' >>~/.bash_profile
+              source ~/.bash_profile
+              go get "github.com/google/gopacket"
+              #
+              #
+              #
+              ### create a virtual network interface that gets decapsulated VXLAN packets
+              #### compile & run go script ###
+              mkdir $GOPATH"/src/vxlan-to-http-request"
+              wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/vxlan-to-http-request"
+              go install "vxlan-to-http-request"
+            - 'Fn::Sub': |
+                sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
+                sudo ip link set vxlan0 up
+                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
+  NetworkLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets: !Ref Subnets
+      Type: network
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: "true"
+  NLBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref NLBTargetGroup
+      LoadBalancerArn: !Ref NetworkLoadBalancer
+      Port: 4789
+      Protocol: UDP
+  NLBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Port: 4789
+      Protocol: UDP
+      VpcId: !Ref HandlerVpcId
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access, VXLAN UDP (for traffic), and VXLAN TCP (for health checks) from the load balancer only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+        - IpProtocol: udp
+          FromPort: 4789
+          ToPort: 4789
+          CidrIp: !GetAtt VpcInfo.CidrBlock
+        - IpProtocol: tcp
+          FromPort: 4789
+          ToPort: 4789
+          CidrIp: !GetAtt VpcInfo.CidrBlock
+      VpcId: !Ref HandlerVpcId
+
+  TrafficMirrorTarget:
+    Type: 'AWS::EC2::TrafficMirrorTarget'
+    Properties: 
+      NetworkLoadBalancerArn: !Ref NetworkLoadBalancer
+
+  TrafficMirrorFilter:
+    Type: 'AWS::EC2::TrafficMirrorFilter'
+
+  TrafficMirrorFilterRule:
+    Type: 'AWS::EC2::TrafficMirrorFilterRule'
+    Properties: 
+      DestinationCidrBlock: !Ref FilterByDestinationCidrBlock
+      DestinationPortRange: 
+        FromPort: !Ref FilterByDestinationPort
+        ToPort: !Ref FilterByDestinationPort
+      Protocol: 6
+      RuleAction: accept
+      RuleNumber: 100
+      SourceCidrBlock: !Ref FilterBySourceCidrBlock
+      TrafficDirection: ingress
+      TrafficMirrorFilterId: !Ref TrafficMirrorFilter
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: !Sub 'arn:${AWS::Partition}:logs:*:*:*'
+          - Effect: Allow
+            Action:
+            - ec2:DescribeVpcs
+            Resource: '*'
+
+  # NOTE: Pay special attention to the indentatiion in the Python code below.
+  # Lines that appear blank are likely not blank, but have leading spaces.
+  GetAttFromParam:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Description: Look up info from a VPC or subnet ID 
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: "python3.7"
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import logging
+          
+          def handler(event, context):
+            logger = logging.getLogger()
+            logger.setLevel(logging.INFO)
+            
+            # initialize our responses, assume failure by default
+            
+            response_data = {}
+            response_status = cfnresponse.FAILED
+            
+            logger.info('Received event: {}'.format(json.dumps(event)))
+            
+            if event['RequestType'] == 'Delete':
+              response_status = cfnresponse.SUCCESS
+              cfnresponse.send(event, context, response_status, response_data)
+            
+            try:
+              ec2=boto3.client('ec2')
+            except Exception as e:
+              logger.info('boto3.client failure: {}'.format(e))
+              cfnresponse.send(event, context, response_status, response_data)
+            
+            name_filter = event['ResourceProperties']['NameFilter']
+            name_filter_parts = name_filter.split('-')
+            resource_type=name_filter_parts[0]
+            
+            if resource_type == "vpc":
+              try:
+                vpcs=ec2.describe_vpcs(VpcIds=[name_filter])
+              except Exception as e:
+                logger.info('ec2.describe_vpcs failure: {}'.format(e))
+                cfnresponse.send(event, context, response_status, response_data)
+              
+              number_of_vpcs = len(vpcs['Vpcs'])
+              logger.info('number of vpcs returned: {}'.format(number_of_vpcs))
+              
+              if number_of_vpcs == 1:
+                CidrBlock = vpcs['Vpcs'][0]['CidrBlock']
+                response_data['CidrBlock'] = CidrBlock
+                logger.info('vpc CidrBlock {}'.format(CidrBlock))
+                response_status = cfnresponse.SUCCESS
+                cfnresponse.send(event, context, response_status, response_data)
+              
+              elif number_of_vpcs == 0:
+                logger.info('no matching vpcs for filter {}'.format(name_filter))
+                cfnresponse.send(event, context, response_status, response_data)
+              
+              else:
+                logger.info('multiple matching vpcs for filter {}'.format(name_filter))
+                cfnresponse.send(event, context, response_status, response_data)
+              
+            elif resource_type == "subnet":
+              try:
+                subnets = ec2.describe_subnets(SubnetIds=[name_filter])
+              except Exception as e:
+                logger.info('ec2.describe_subnets failure: {}'.format(e))
+                cfnresponse.send(event, context, response_status, response_data)
+              
+              number_of_subnets = len(subnets['Subnets'])
+              logger.info('number of subnets returned: {}'.format(number_of_subnets))
+              
+              if number_of_subnets == 1:
+                CidrBlock = subnets['Subnets'][0]['CidrBlock']
+                VpcId = subnets['Subnets'][0]['VpcId']
+                AvailabilityZone = subnets['Subnets'][0]['AvailabilityZone']
+                response_data['AvailabilityZone'] = AvailabilityZone
+                response_data['CidrBlock'] = CidrBlock
+                response_data['VpcId'] = VpcId
+                
+                logger.info('subnet AvailabilityZone {}'.format(AvailabilityZone))
+                logger.info('subnet CidrBlock {}'.format(CidrBlock))
+                logger.info('subnet VpcId {}'.format(VpcId))
+                
+                response_status = cfnresponse.SUCCESS
+                cfnresponse.send(event, context, response_status, response_data)
+                
+              elif number_of_subnets == 0:
+                logger.info('no matching subnet for filter {}'.format(name_filter))
+                cfnresponse.send(event, context, response_status, response_data)
+                
+              else:
+                logger.info('multiple matching subnets for filter {}'.format(name_filter))
+                cfnresponse.send(event, context, response_status, response_data)
+              
+            else:
+              logger.info('invalid resource type {}'.resource_type)
+              cfnresponse.send(event, context, response_status, response_data)
+
+  VpcInfo:
+    Type: Custom::VpcInfo
+    Properties:
+      ServiceToken: !GetAtt GetAttFromParam.Arn
+      NameFilter: !Ref HandlerVpcId
+
+Outputs:
+  TrafficMirrorTarget:
+    Description: The ID of the Traffic Mirror target.
+    Value: !Ref TrafficMirrorTarget
+  TrafficMirrorFilter:
+    Description: The ID of the Traffic Mirror filter.
+    Value: !Ref TrafficMirrorFilter
