@@ -26,7 +26,6 @@ The only protocol supported is HTTP. HTTPS is not supported. Therefore, SSL offl
 
 If you increase the number of instances in the autoscaling group, traffic may get unbalanced in some cases due to how Network Load Balancer flow hash algorithm works. This may happen during scale out operations in the replay handler. To prevent this from happening, when a scale out action is needed from n to m instances (e.g. from 3 to 4), you can scale out to n+m first (e.g. to 3+4=7) and then scale in to m (e.g. 4). You can do this operation with two subsequent updates of the "InstanceNumber" parameter of the CloudFormation Stack. The CloudFormation template provided is already configured to remove the oldest instances first, so that traffic is re-distributed equally to the newer instances.
 
-
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
