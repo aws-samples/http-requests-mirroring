@@ -229,6 +229,7 @@ Resources:
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
+      Scheme: internal
       Subnets: !Ref HandlerSubnetIds
       Type: network
       LoadBalancerAttributes:
