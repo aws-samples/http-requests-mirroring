@@ -206,7 +206,7 @@ Resources:
               yum install git -y
               yum install go -y
               # dependency of github.com/google/gopacket
-              yum install install libpcap-devel -y
+              yum install libpcap-devel -y
               #
               #
               ### dependency of main.go ###
