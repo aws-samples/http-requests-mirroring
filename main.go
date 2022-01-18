@@ -154,7 +154,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 		forwardReq.Header.Set("X-Forwarded-Host", req.Host)
 	}
 	
-	forwardReq.Header.Set("Host", req.Host)
+	forwardReq.Host = req.Host
 
 	// Execute the new HTTP request
 	httpClient := &http.Client{}
