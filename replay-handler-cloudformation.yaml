@@ -121,6 +121,12 @@ Parameters:
   PercentageByHeader:
     Description: If the parameter PercentageBy is set to 'header', then enter the name of the header. Otherwise, leave it empty.
     Type: String
+  KeepOriginalHostHeader:
+    Description: Copy the original Host header from the mirrored request. Keep empty to set the Host header to RequestsForwardDestination.
+    Type: String
+    AlloedValues:
+      - ''
+      - '-keep-host-header'
 
 Metadata: 
   AWS::CloudFormation::Interface: 
@@ -225,7 +231,7 @@ Resources:
             - 'Fn::Sub': |
                 sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
                 sudo ip link set vxlan0 up
-                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
+                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}" ${KeepOriginalHostHeader}
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
