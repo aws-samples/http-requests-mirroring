@@ -124,6 +124,7 @@ Parameters:
   KeepOriginalHostHeader:
     Description: Copy the original Host header from the mirrored request. Keep empty to set the Host header to RequestsForwardDestination.
     Type: String
+    Default: ''
     AlloedValues:
       - ''
       - '-keep-host-header'
