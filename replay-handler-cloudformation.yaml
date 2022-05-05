@@ -205,6 +205,11 @@ Resources:
               yum update -y
               yum install git -y
               yum install go -y
+              go install golang.org/dl/go1.15.14@latest
+              /root/go/bin/go1.15.14 download
+              yes | cp /root/go/bin/go1.15.14 /usr/bin/go
+              mkdir -p /root/go/src/github.com/google
+              
               # dependency of github.com/google/gopacket
               yum install libpcap-devel -y
               #
@@ -219,7 +224,7 @@ Resources:
               #
               ### create a virtual network interface that gets decapsulated VXLAN packets
               #### compile & run go script ###
-              mkdir $GOPATH"/src/vxlan-to-http-request"
+              mkdir $GOPATH"/src/vxlan-to-http-request" -p
               wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/vxlan-to-http-request"
               go install "vxlan-to-http-request"
             - 'Fn::Sub': |
