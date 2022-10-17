@@ -240,6 +240,7 @@ func main() {
 				log.Println("Unusable packet")
 				continue
 			}
+			log.Println("packet received, forwarding...")
 			tcp := packet.TransportLayer().(*layers.TCP)
 			assembler.AssembleWithTimestamp(packet.NetworkLayer().NetworkFlow(), tcp, packet.Metadata().Timestamp)
 

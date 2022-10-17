@@ -209,19 +209,17 @@ Resources:
               yum install libpcap-devel -y
               #
               #
-              ### dependency of main.go ###
               go env GOPATH
               echo 'export GOPATH=$HOME/go' >>~/.bash_profile
               source ~/.bash_profile
+              #
+              mkdir "vxlan-to-http-request"
+              cd vxlan-to-http-request/
+              go mod init vxlan-to-http-request
               go get "github.com/google/gopacket"
-              #
-              #
-              #
-              ### create a virtual network interface that gets decapsulated VXLAN packets
-              #### compile & run go script ###
-              mkdir $GOPATH"/src/vxlan-to-http-request"
-              wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/vxlan-to-http-request"
-              go install "vxlan-to-http-request"
+              wget https://raw.githubusercontent.com/elangelo/http-requests-mirroring/main/main.go"
+              go build ./
+              go install vxlan-to-http-request
             - 'Fn::Sub': |
                 sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
                 sudo ip link set vxlan0 up
