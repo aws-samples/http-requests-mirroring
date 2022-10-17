@@ -217,7 +217,7 @@ Resources:
               cd vxlan-to-http-request/
               go mod init vxlan-to-http-request
               go get "github.com/google/gopacket"
-              wget https://raw.githubusercontent.com/elangelo/http-requests-mirroring/main/main.go"
+              wget "https://raw.githubusercontent.com/elangelo/http-requests-mirroring/main/main.go"
               go build ./
               go install vxlan-to-http-request
             - 'Fn::Sub': |
