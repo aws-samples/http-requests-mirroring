@@ -207,6 +207,7 @@ Resources:
               yum install go -y
               # dependency of github.com/google/gopacket
               yum install libpcap-devel -y
+              yum install screen -y
               #
               #
               go env GOPATH
@@ -223,7 +224,7 @@ Resources:
             - 'Fn::Sub': |
                 sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
                 sudo ip link set vxlan0 up
-                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
+                screen -d -m $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage 100 -filter-request-port "${FilterByDestinationPort}"
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
