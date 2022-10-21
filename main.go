@@ -153,7 +153,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	if forwardReq.Header.Get("X-Forwarded-Host") == "" {
 		forwardReq.Header.Set("X-Forwarded-Host", req.Host)
 	}
-
+	time.Sleep(30 * time.Second)
 	// Execute the new HTTP request
 	httpClient := &http.Client{}
 	resp, rErr := httpClient.Do(forwardReq)
@@ -161,6 +161,8 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 		// log.Println("Forward request error", ":", err)
 		return
 	}
+
+	defer log.Println("Response: %f", resp)
 
 	defer resp.Body.Close()
 }
