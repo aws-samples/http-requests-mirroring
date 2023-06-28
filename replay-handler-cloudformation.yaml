@@ -211,6 +211,7 @@ Resources:
               #
               ### dependency of main.go ###
               go env GOPATH
+              go env -w GO111MODULE=off
               echo 'export GOPATH=$HOME/go' >>~/.bash_profile
               source ~/.bash_profile
               go get "github.com/google/gopacket"
