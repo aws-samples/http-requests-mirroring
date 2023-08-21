@@ -213,19 +213,16 @@ Resources:
               go env GOPATH
               echo 'export GOPATH=$HOME/go' >>~/.bash_profile
               source ~/.bash_profile
-              go get "github.com/google/gopacket"
               #
               #
               #
               ### create a virtual network interface that gets decapsulated VXLAN packets
               #### compile & run go script ###
-              mkdir $GOPATH"/src/vxlan-to-http-request"
-              wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/vxlan-to-http-request"
-              go install "vxlan-to-http-request"
+              go install github.com/aws-samples/http-requests-mirroring@latest
             - 'Fn::Sub': |
                 sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
                 sudo ip link set vxlan0 up
-                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
+                $GOPATH"/bin/http-requests-mirroring" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
