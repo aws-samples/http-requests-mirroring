@@ -229,10 +229,7 @@ Resources:
                 #
                 ### create a virtual network interface that gets decapsulated VXLAN packets
                 #### compile & run go script ###
-                #go install github.com/aws-samples/http-requests-mirroring@latest
-                mkdir -p $GOPATH"/src/vxlan-to-http-request"
                 wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/http-requests-mirroring"
-                go install "http-requests-mirroring"
                 pushd $GOPATH"/src/http-requests-mirroring"
                 go mod init http-requests-mirroring
                 go mod tidy
