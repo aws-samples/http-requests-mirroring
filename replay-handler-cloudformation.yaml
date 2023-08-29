@@ -48,7 +48,7 @@ Parameters:
     Description: Number of EC2 instances in the replay handler.
   KeyName:
     Description: This parameter is optional. The name of the EC2 Key Pair to allow SSH access to the instances.
-    Type: 'String'
+    Type: 'AWS::EC2::KeyPair::KeyName'
     ConstraintDescription: This parameter is optional. If provided, must be the name of an existing EC2 KeyPair.
   SSHLocation:
     Description: This parameter is optional. The IP address range that can be used to SSH to the EC2 instances in the replay handler.
@@ -121,6 +121,13 @@ Parameters:
   PercentageByHeader:
     Description: If the parameter PercentageBy is set to 'header', then enter the name of the header. Otherwise, leave it empty.
     Type: String
+  KeepOriginalHostHeader:
+    Description: Copy the original Host header from the mirrored request. Keep empty to set the Host header to RequestsForwardDestination.
+    Type: String
+    Default: ''
+    AllowedValues:
+      - ''
+      - '-keep-host-header'
 
 Metadata: 
   AWS::CloudFormation::Interface: 
@@ -171,11 +178,14 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       VPCZoneIdentifier: !Ref HandlerSubnetIds
-      LaunchConfigurationName: !Ref LaunchConfig
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber 
       MinSize: !Ref InstanceNumber
       MaxSize: !Ref InstanceNumber
       HealthCheckType: ELB
       HealthCheckGracePeriod: 180
+      # AutoScalingGroupName: ASG-ReplayHandler
       TargetGroupARNs:
         - !Ref NLBTargetGroup
       TerminationPolicies:
@@ -183,50 +193,56 @@ Resources:
     UpdatePolicy:
       AutoScalingRollingUpdate:
         MinInstancesInService: 0
-  LaunchConfig:
-    Type: 'AWS::AutoScaling::LaunchConfiguration'
+  LaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
     Properties:
-      KeyName: !If [KeyNameEmpty, !Ref 'AWS::NoValue', !Ref KeyName]
-      ImageId: !If [UseArm, !Ref LatestAmiIdArm, !Ref LatestAmiIdX86]
-      SecurityGroups:
-        - !Ref InstanceSecurityGroup
-      InstanceType: !Ref InstanceType
-      AssociatePublicIpAddress: "false"
-      UserData: !Base64 
-        'Fn::Join':
-          - ''
-          - - |
-              #!/bin/bash -xe
-              #
-              #
-              ### update and install ###
-              #
-              export HOME=~
-              yum update -y
-              yum install git -y
-              yum install go -y
-              # dependency of github.com/google/gopacket
-              yum install libpcap-devel -y
-              #
-              #
-              ### dependency of main.go ###
-              go env GOPATH
-              go env -w GO111MODULE=off
-              echo 'export GOPATH=$HOME/go' >>~/.bash_profile
-              source ~/.bash_profile
-              go get "github.com/google/gopacket"
-              #
-              #
-              #
-              ### create a virtual network interface that gets decapsulated VXLAN packets
-              #### compile & run go script ###
-              mkdir $GOPATH"/src/vxlan-to-http-request"
-              wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/vxlan-to-http-request"
-              go install "vxlan-to-http-request"
-            - 'Fn::Sub': |
-                sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
-                sudo ip link set vxlan0 up
-                $GOPATH"/bin/vxlan-to-http-request" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}"
+      LaunchTemplateName: LT-ReplayHandler
+      LaunchTemplateData:
+        KeyName: !If [KeyNameEmpty, !Ref 'AWS::NoValue', !Ref KeyName]
+        ImageId: !If [UseArm, !Ref LatestAmiIdArm, !Ref LatestAmiIdX86]
+        SecurityGroupIds:
+          - !Ref InstanceSecurityGroup
+        InstanceType: !Ref InstanceType
+        UserData: !Base64 
+          'Fn::Join':
+            - ''
+            - - |
+                #!/bin/bash -xe
+                #
+                #
+                ### update and install ###
+                #
+                export HOME=~
+                yum update -y
+                yum install git -y
+                yum install go -y
+                # dependency of github.com/google/gopacket
+                yum install libpcap-devel -y
+                #
+                #
+                ### dependency of main.go ###
+                go env GOPATH
+                echo 'export GOPATH=$HOME/go' >>~/.bash_profile
+                source ~/.bash_profile
+                #
+                #
+                #
+                ### create a virtual network interface that gets decapsulated VXLAN packets
+                #### compile & run go script ###
+                #go install github.com/aws-samples/http-requests-mirroring@latest
+                mkdir -p $GOPATH"/src/vxlan-to-http-request"
+                wget https://github.com/aws-samples/http-requests-mirroring/raw/main/main.go -P $GOPATH"/src/http-requests-mirroring"
+                go install "http-requests-mirroring"
+                pushd $GOPATH"/src/http-requests-mirroring"
+                go mod init http-requests-mirroring
+                go mod tidy
+                go install .
+                popd
+              - 'Fn::Sub': |
+                  sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
+                  sudo ip link set vxlan0 up
+                  $GOPATH"/bin/http-requests-mirroring" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}" ${KeepOriginalHostHeader}
+  
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
