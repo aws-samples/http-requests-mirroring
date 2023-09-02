@@ -154,6 +154,10 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	if forwardReq.Header.Get("X-Forwarded-Host") == "" {
 		forwardReq.Header.Set("X-Forwarded-Host", req.Host)
 	}
+	
+	if keepHostHeader {
+		forwardReq.Host = req.Host
+	}
 
 	if *keepHostHeader {
 		forwardReq.Host = req.Host
