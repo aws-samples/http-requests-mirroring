@@ -48,7 +48,7 @@ Parameters:
     Description: Number of EC2 instances in the replay handler.
   KeyName:
     Description: This parameter is optional. The name of the EC2 Key Pair to allow SSH access to the instances.
-    Type: 'AWS::EC2::KeyPair::KeyName'
+    Type: 'String'
     ConstraintDescription: This parameter is optional. If provided, must be the name of an existing EC2 KeyPair.
   SSHLocation:
     Description: This parameter is optional. The IP address range that can be used to SSH to the EC2 instances in the replay handler.
