@@ -50,6 +50,10 @@ Parameters:
     Description: This parameter is optional. The name of the EC2 Key Pair to allow SSH access to the instances.
     Type: 'String'
     ConstraintDescription: This parameter is optional. If provided, must be the name of an existing EC2 KeyPair.
+  IamInstanceProfile:
+    Description: This parameter is optional. The instance profile of the EC2 .
+    Type: 'String'
+    ConstraintDescription: This parameter is optional. If provided, must be the arn of an existing EC2 IamInstanceProfile.
   SSHLocation:
     Description: This parameter is optional. The IP address range that can be used to SSH to the EC2 instances in the replay handler.
     Type: String
@@ -143,6 +147,7 @@ Metadata:
           - InstanceType
           - InstanceNumber
           - KeyName
+          - IamInstanceProfileEmpty
           - SSHLocation
       -
         Label:
@@ -171,6 +176,7 @@ Mappings:
 Conditions:
   UseArm: !Equals [!FindInMap [AmiMap, !Ref "InstanceType", "arch"], arm]
   KeyNameEmpty: !Equals [!Ref KeyName, '']
+  IamInstanceProfileEmpty: !Equals [!Ref IamInstanceProfile, '']
   HasSSHLocation: !Not [!Equals [!Ref SSHLocation, '']]
 
 Resources:
@@ -198,8 +204,7 @@ Resources:
     Properties:
       LaunchTemplateName: LT-ReplayHandler
       LaunchTemplateData:
-        IamInstanceProfile:
-          Arn: arn:aws:iam::746166211068:instance-profile/stg-deploy-ec2-v2
+        IamInstanceProfile: !If [IamInstanceProfileEmpty, !Ref 'AWS::NoValue', !Ref IamInstanceProfile]
         KeyName: !If [KeyNameEmpty, !Ref 'AWS::NoValue', !Ref KeyName]
         ImageId: !If [UseArm, !Ref LatestAmiIdArm, !Ref LatestAmiIdX86]
         SecurityGroupIds:
