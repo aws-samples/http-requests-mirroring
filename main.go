@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/gopacket"
@@ -40,6 +41,7 @@ var fwdBy = flag.String("percentage-by", "", "Can be empty. Otherwise, valid val
 var fwdHeader = flag.String("percentage-by-header", "", "If percentage-by is header, then specify the header here.")
 var reqPort = flag.Int("filter-request-port", 80, "Must be between 0 and 65535.")
 var keepHostHeader = flag.Bool("keep-host-header", false, "Keep Host header from original request.")
+var outputFilePath = flag.String("outputFilePath", "", "Path to the output file for saving requests.")
 
 // Build a simple HTTP request parser using tcpassembly.StreamFactory and tcpassembly.Stream interfaces
 
@@ -74,14 +76,17 @@ func (h *httpStream) run() {
 		} else if err != nil {
 			log.Println("Error reading stream", h.net, h.transport, ":", err)
 		} else {
-			reqSourceIP := h.net.Src().String()
-			reqDestionationPort := h.transport.Dst().String()
+			// reqSourceIP := h.net.Src().String()
+			// reqDestionationPort := h.transport.Dst().String()
 			body, bErr := ioutil.ReadAll(req.Body)
 			if bErr != nil {
 				return
 			}
 			req.Body.Close()
-			go forwardRequest(req, reqSourceIP, reqDestionationPort, body)
+			// go forwardRequest(req, reqSourceIP, reqDestionationPort, body)
+
+			// Write the request to the file.
+			writeRequestToFile(req, body)
 		}
 	}
 }
@@ -170,6 +175,50 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	defer resp.Body.Close()
 }
 
+func writeRequestToFile(req *http.Request, body []byte) {
+	if *outputFilePath == "" {
+		return
+	}
+
+	if strings.Contains(req.RequestURI, "assets") {
+		return
+	}
+
+	// Open the file for appending the request data.
+	file, err := os.OpenFile(*outputFilePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Println("Error opening output file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Write the request details to the file.
+	havingCognitosubHeader := false
+	cognitoSub := ""
+	requestId := ""
+	for header, values := range req.Header {
+		if header == "Requestid" {
+			requestId = strings.Join(values, " ")
+			continue
+		}
+		if header == "Cognitosub" {
+			cognitoSub = strings.Join(values, " ")
+			havingCognitosubHeader = true
+			continue
+		}
+	}
+	if !havingCognitosubHeader {
+		return
+	}
+
+	logRequest := fmt.Sprintf("\"%s\",\"%s %s\",\"%s\",\"%s\"\n", requestId, req.Method, req.RequestURI, cognitoSub, body)
+	_, err = fmt.Fprintf(file, "%s", logRequest)
+	if err != nil {
+		log.Println("Error writing logRequest to output file:", err)
+		return
+	}
+}
+
 // Listen for incoming connections.
 func openTCPClient() {
 	ln, err := net.Listen("tcp", ":4789")
@@ -193,6 +242,16 @@ func main() {
 	var err error
 
 	flag.Parse()
+
+	if *outputFilePath == "" {
+		log.Printf("outputFilePath is %s\nPlease check again", *outputFilePath)
+		return
+	}
+
+	if *outputFilePath != "" {
+		log.Printf("Writing requests to file: %s\n", *outputFilePath)
+	}
+
 	//labels validation
 	if *fwdPerc > 100 || *fwdPerc < 0 {
 		err = fmt.Errorf("Flag percentage is not between 0 and 100. Value: %f.", *fwdPerc)
