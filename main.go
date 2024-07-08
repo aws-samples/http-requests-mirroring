@@ -209,7 +209,7 @@ func main() {
 
 	// Set up pcap packet capture
 	log.Printf("Starting capture on interface vxlan0")
-	handle, err = pcap.OpenLive("vxlan0", 8951, true, pcap.BlockForever)
+	handle, err = pcap.OpenLive("vxlan0", 65535, true, pcap.BlockForever)
 	if err != nil {
 		log.Fatal(err)
 	}
