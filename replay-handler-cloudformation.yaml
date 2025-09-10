@@ -233,6 +233,17 @@ Resources:
               - 'Fn::Sub': |
                   sudo ip link add vxlan0 type vxlan id ${TrafficMirroringVNI} dev eth0 dstport 4789
                   sudo ip link set vxlan0 up
+                  # Set up logrotate for http-requests-mirroring.log (rotate at 500M, keep 3, compress)
+                  cat <<EOF | sudo tee /etc/logrotate.d/http-requests-mirroring
+/var/log/http-requests-mirroring.log {
+    size 500M
+    rotate 3
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
                   $GOPATH"/bin/http-requests-mirroring" -destination "${RequestsForwardDestination}" -percentage "${ForwardPercentage}" -percentage-by "${PercentageBy}" -percentage-by-header "${PercentageByHeader}" -filter-request-port "${FilterByDestinationPort}" ${KeepOriginalHostHeader}
   NetworkLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'

@@ -72,12 +72,13 @@ func (h *httpStream) run() {
 			// We must read until we see an EOF... very important!
 			return
 		} else if err != nil {
-			log.Println("Error reading stream", h.net, h.transport, ":", err)
+			log.Printf("Error reading stream %v %v: %v", h.net, h.transport, err)
 		} else {
 			reqSourceIP := h.net.Src().String()
 			reqDestionationPort := h.transport.Dst().String()
 			body, bErr := ioutil.ReadAll(req.Body)
 			if bErr != nil {
+				log.Printf("Error reading request body from %v:%v: %v", reqSourceIP, reqDestionationPort, bErr)
 				return
 			}
 			req.Body.Close()
@@ -87,7 +88,6 @@ func (h *httpStream) run() {
 }
 
 func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort string, body []byte) {
-
 	// if percentage flag is not 100, then a percentage of requests is skipped
 	if *fwdPerc != 100 {
 		var uintForSeed uint64
@@ -97,7 +97,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 			var b [8]byte
 			_, err := crypto_rand.Read(b[:])
 			if err != nil {
-				log.Println("Error generating crypto random unit for seed", ":", err)
+				log.Printf("Error generating crypto random unit for seed: %v", err)
 				return
 			}
 			// uintForSeed is random
@@ -120,6 +120,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 		randomPercent := math_rand.Float64() * 100
 		// skip a percentage of requests
 		if randomPercent > *fwdPerc {
+			log.Printf("Skipping request from %v:%v (randomPercent=%.2f > %.2f)", reqSourceIP, reqDestionationPort, randomPercent, *fwdPerc)
 			return
 		}
 	}
@@ -130,6 +131,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	// create a new HTTP request
 	forwardReq, err := http.NewRequest(req.Method, url, bytes.NewReader(body))
 	if err != nil {
+		log.Printf("Error creating forward request for %v:%v: %v", reqSourceIP, reqDestionationPort, err)
 		return
 	}
 
@@ -163,7 +165,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	httpClient := &http.Client{}
 	resp, rErr := httpClient.Do(forwardReq)
 	if rErr != nil {
-		// log.Println("Forward request error", ":", err)
+		log.Printf("Forward request error for %v:%v: %v", reqSourceIP, reqDestionationPort, rErr)
 		return
 	}
 
@@ -188,6 +190,13 @@ func openTCPClient() {
 }
 
 func main() {
+	// Set log output to /var/log/http-requests-mirroring.log
+	logFile, logErr := os.OpenFile("/var/log/http-requests-mirroring.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if logErr != nil {
+		log.Fatalf("Failed to open log file: %v", logErr)
+	}
+	log.SetOutput(logFile)
+
 	defer util.Run()()
 	var handle *pcap.Handle
 	var err error
@@ -214,7 +223,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Set up BPF filter
+	// Set up BPF filter to only capture packets with the specified destination port.
+	// This means only packets destined for the port specified by -filter-request-port are processed by this program.
 	BPFFilter := fmt.Sprintf("%s%d", "tcp and dst port ", *reqPort)
 	if err := handle.SetBPFFilter(BPFFilter); err != nil {
 		log.Fatal(err)
